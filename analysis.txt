@@ -1,0 +1,13 @@
+#servers: 1
+shubhampanchal@Shubhams-Laptop leaderboard % node loadtest.js 100 100
+Overall average response time: 13788ms, Unsuccesful requests: 9937
+
+#servers: 10
+shubhampanchal@Shubhams-Laptop leaderboard % node loadtest.js 100 100
+Overall average response time: 4076ms, Unsuccesful requests: 4009
+
+shubhampanchal@Shubhams-Laptop leaderboard % node loadtest.js 10 100 
+Overall average response time: 605ms, Unsuccesful requests: 8                                                          
+
+shubhampanchal@Shubhams-Laptop leaderboard % node loadtest.js 10 1000
+Overall average response time: 4668ms, Unsuccesful requests: 2969

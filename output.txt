@@ -1,0 +1,2 @@
+Load balancer started on port 8080
+Forwarding requests to ports 3000
