@@ -55,16 +55,11 @@ const upsertScoreInRedis = ({user_id, score}) => {
     });
 }
 
-// get top k users from redis
-const getTopKUsersFromRedis = (k) => {
+// retrieve users in a range from redis
+const getUsersInRangeFromRedis = ({start, end, REV}) => {
     return new Promise((resolve, reject) => {
-        if (!k || !Number.isInteger(k) || k < 1) {
-            reject('k not provided or not an integer or less than 1');
-            return;
-        }
-
         // zRevRange will return the top k users
-        redisClient.zRangeWithScores(SORTED_SET_KEY, 0, k - 1, { REV: true }).then((reply) => {
+        redisClient.zRangeWithScores(SORTED_SET_KEY, start, end, { REV }).then((reply) => {
             // for each user retrieve the username
             let promises = [];
             reply.forEach((user) => {
@@ -72,7 +67,8 @@ const getTopKUsersFromRedis = (k) => {
                     redisClient.hGet(user.value, 'username').then((username) => {
                         resolve({
                             username,
-                            score: user.score
+                            score: user.score,
+                            user_id: user.value
                         });
                     }).catch((err) => {
                         reject(err);
@@ -82,6 +78,47 @@ const getTopKUsersFromRedis = (k) => {
 
             // wait for all promises to resolve
             Promise.all(promises).then((reply) => {
+                resolve(reply);
+            }).catch((err) => {
+                reject(err);
+            });
+        }).catch((err) => {
+            reject(err);
+        });
+    });
+};
+
+// get top k users from redis
+const getTopKUsersFromRedis = (k) => {
+    return new Promise((resolve, reject) => {
+        if (!k || !Number.isInteger(k) || k < 1) {
+            reject('k not provided or not an integer or less than 1');
+            return;
+        }
+
+        let start = 0, end = k - 1;
+        // get users in range [start, end]
+        getUsersInRangeFromRedis({start, end, REV: true}).then((reply) => {
+            resolve(reply);
+        }).catch((err) => {
+            reject(err);
+        });
+    });
+}
+
+// get relative top k users from redis
+const getRelativeTopKUsersFromRedis = ({user_id, k}) => {
+    return new Promise((resolve, reject) => {
+        if (!user_id || !k || !Number.isInteger(k) || k < 1) {
+            reject('user_id or k not provided or k not an integer or less than 1');
+            return;
+        }
+
+        redisClient.zRank(SORTED_SET_KEY, user_id.toString()).then((rank) => {
+            // get the range of users
+            let start = Math.max(0, rank - k), end = rank + k;
+            // get users in range [start, end]
+            getUsersInRangeFromRedis({start, end, REV: false}).then((reply) => {
                 resolve(reply);
             }).catch((err) => {
                 reject(err);
@@ -126,5 +163,6 @@ module.exports = {
     addUserToRedis,
     upsertScoreInRedis,
     getTopKUsersFromRedis,
-    getUserScoreFromRedis
+    getUserScoreFromRedis,
+    getRelativeTopKUsersFromRedis
 }

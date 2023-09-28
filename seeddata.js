@@ -1,10 +1,11 @@
 const request = require('request');
+const async = require('async');
 
 // get number of users to add and user-prefix from command line arguments
-// node seeddata.js <number of users> <user-prefix> <number of threads>
+// node seeddata.js <number of users> <user-prefix> <number of threads> <start index>
 
 if (process.argv.length < 5) {
-    console.error('Please specify the number of users, user-prefix and number of threads.');
+    console.error('Please specify the number of users, user-prefix and number of threads');
     process.exit(1);
 }
 
@@ -26,60 +27,96 @@ if (isNaN(numThreads) || numThreads < 1) {
     process.exit(1);
 }
 
-// request options
-const baseUrl = 'http://localhost:8080';
-const options = {
-    url: baseUrl + '/users/register',
-    method: 'POST',
-    headers: {
-        'Accept': 'application/json'
-    },
-    json: true,
-    body: {
-        email: '',
-        name: '',
-        password: ''
+const startIndex = parseInt(process.argv[5]) || 0;
+if (isNaN(startIndex) || startIndex < 0) {
+    console.error('Please specify the start index');
+    process.exit(1);
+}
+
+// keep track of the number of users created
+let numOfUsersCreated = 0;
+let failedRequests = 0;
+let statusCodes = {};
+
+// prints the progress bar
+function printProgressBar() {
+    let progress = Math.floor((numOfUsersCreated / numUsers) * 100);
+    let progressBar = '';
+    for (let i = 0; i < progress; i++) {
+        progressBar += '=';
     }
+    for (let i = progress; i < 100; i++) {
+        progressBar += ' ';
+    }
+    process.stdout.clearLine();
+    process.stdout.cursorTo(0);
+    process.stdout.write(`[${progressBar}] ${progress}%, Failed Requests: ${failedRequests}`);
+    if (numOfUsersCreated === numUsers) {
+        console.log();
+        console.log(statusCodes);
+    }
+}
+
+// function to create users from [start, end)
+function createUsers(start, end) {
+    async.timesSeries(end - start, (i, next) => {
+        // create the user object
+        let username = `${userPrefix}-${start + i}`;
+        const user = {
+            name: username,
+            email: `${username}@gmail.com`,
+            password: 'password'
+        };
+
+        // make the request
+        request.post({
+            url: 'http://localhost:8080/users/register',
+            body: user,
+            json: true
+        }, (err, res, body) => {
+            if (err) {
+                console.error(err);
+                failedRequests++;
+                let statusCode = res ? res.statusCode : 'No response';
+                statusCodes[res.statusCode] = (statusCodes[statusCode] || 0) + 1;
+            }
+
+            // check the status code
+            if (res.statusCode !== 201) {
+                // console.error(res.statusCode);
+                failedRequests++;
+                let statusCode = res ? res.statusCode : 'No response';
+                statusCodes[res.statusCode] = (statusCodes[statusCode] || 0) + 1;
+            }
+
+            // console.log(body);
+            numOfUsersCreated++;
+            printProgressBar();
+            let delay = Math.floor(Math.random() * 100);
+            setTimeout(() => {
+                next();
+            }, delay);
+        });
+    }, (err) => {
+        if (err) {
+            console.error(err);
+            // console.log(`Failed ${start} to ${end}`);
+        }
+        // console.log(`Done ${start} to ${end}`);
+    });
 };
 
 
-// find number of users per thread
-const numUsersPerThread = Math.floor(numUsers / numThreads);
-
-function spawnThread({start, end}) {
-    return new Promise((resolve, reject) => {
-        console.log(`Spawning thread with start = ${start} and end = ${end}`);
-        // spawn a thread
-        for (let i = start; i < end; i++) {
-            // update the request body
-            let username = `${userPrefix}${i}`;
-            let body = {
-                email: `${username}@gmail.com`,
-                name: `${username}`,
-                password: `${username}1234`
-            }
-    
-            // make the request
-            request({
-                ...options,
-                body
-            }, (err, res, body) => {
-                if (err) {
-                    console.error(err);
-                } else {
-                    console.log(body);
-                }
-            });
-        }    
-    });
-}
-
-// spawn threads
-for (let i = 0; i < numThreads; i++) {
-    // calculate the start and end index for the thread
-    const start = i * numUsersPerThread;
-    const end = (i + 1) * numUsersPerThread;
-
-    // spawn a thread
-    spawnThread({start, end});
-}
+// create users
+let numberOfUsersPerThread = Math.floor(numUsers / numThreads);
+async.timesSeries(numThreads, (i, next) => {
+    let start = startIndex + i * numberOfUsersPerThread;
+    let end = startIndex + (i + 1) * numberOfUsersPerThread;
+    createUsers(start, end);
+    next();
+}, (err) => {
+    if (err) {
+        console.error(err);
+    }
+    console.log(`Creating ${numUsers} users...`);
+});

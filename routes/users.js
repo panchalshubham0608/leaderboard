@@ -120,8 +120,9 @@ const updateScoreInBackground = ({user_id, score}) => {
 router.post('/score', isLoggedIn, (req, res) => {
     // get the score from the request body
     const { score } = req.body;
+    console.log(req.body);
     // check if the score exists
-    if (!score || typeof score !== 'number') {
+    if (typeof score !== 'number') {
         return res.status(400).send('Bad Request');
     }
 
